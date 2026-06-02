@@ -1,0 +1,64 @@
+name: Test Scripts
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Test scan-npm.sh
+        run: |
+          output=$(bash keepup-ai-tools/scripts/scan-npm.sh)
+          echo "$output"
+          echo "$output" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8')); console.log('npm installed:', Object.keys(d.installed).length)"
+
+      - name: Test scan-npm.sh --with-outdated
+        run: |
+          output=$(bash keepup-ai-tools/scripts/scan-npm.sh --with-outdated)
+          echo "$output"
+          echo "$output" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8')); console.log('npm outdated check OK')"
+
+      - name: Test scan-skills.sh
+        run: |
+          output=$(bash keepup-ai-tools/scripts/scan-skills.sh)
+          echo "$output"
+          echo "$output" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8')); console.log('skills lock groups:', Object.keys(d.lock).length, 'dirs:', Object.keys(d.directories).length)"
+
+      - name: Test scan-plugins.sh
+        run: |
+          output=$(bash keepup-ai-tools/scripts/scan-plugins.sh)
+          echo "$output"
+          echo "$output" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8')); console.log('plugins:', d.plugins.length)"
+
+      - name: Test scan-system.sh
+        run: |
+          output=$(bash keepup-ai-tools/scripts/scan-system.sh)
+          echo "$output"
+          echo "$output" | node -e "
+            const d=JSON.parse(require('fs').readFileSync(0,'utf8'));
+            console.log('cliTools:', d.cliTools.length);
+            for (const [k,v] of Object.entries(d.packageManagers)) {
+              console.log(k+':', v.available);
+            }
+          "
+
+      - name: Test scan-wsl.sh (Windows only)
+        if: runner.os == 'Windows'
+        run: |
+          output=$(bash keepup-ai-tools/scripts/scan-wsl.sh)
+          echo "$output"
+          echo "$output" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8')); console.log('wsl_available:', d.wsl_available)"

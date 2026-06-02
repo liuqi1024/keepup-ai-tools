@@ -37,9 +37,7 @@ npx skills add liuqi1024/keepup-ai-tools -g -y
 cp -r keepup-ai-tools .claude/skills/
 ```
 
-<p align="center">
-  <img src="docs/install-demo.png" alt="Installation demo" width="600">
-</p>
+<img src="docs/install-demo.png" alt="Installation demo" width="600">
 
 Then in Claude Code, just say:
 

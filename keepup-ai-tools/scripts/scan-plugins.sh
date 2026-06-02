@@ -6,62 +6,86 @@
 set -euo pipefail
 
 home="${HOME:-$(eval echo ~)}"
-plugins_path="$home/.claude/plugins/installed_plugins.json"
-mk_path="$home/.claude/plugins/known_marketplaces.json"
 
-# Read installed plugins via stdin
-if [ -f "$plugins_path" ]; then
-  plugins=$(node -e "
-    const raw = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+# Delegate all logic to node
+node -e '
+const fs = require("fs");
+const path = require("path");
+const { execSync } = require("child_process");
+const home = process.argv[1];
+const checkRemote = process.argv.includes("--check-remote");
+
+const pluginsPath = path.join(home, ".claude/plugins/installed_plugins.json");
+const mkPath = path.join(home, ".claude/plugins/known_marketplaces.json");
+
+// Read installed plugins
+let plugins = [];
+if (fs.existsSync(pluginsPath)) {
+  try {
+    const raw = JSON.parse(fs.readFileSync(pluginsPath, "utf8"));
     const pluginsObj = raw.plugins || {};
-    const arr = [];
     for (const [key, installs] of Object.entries(pluginsObj)) {
       if (!Array.isArray(installs) || installs.length === 0) continue;
       const inst = installs[0];
-      const parts = key.split('@');
-      arr.push({
+      const parts = key.split("@");
+      plugins.push({
         name: parts[0],
-        marketplace: parts.slice(1).join('@') || null,
+        marketplace: parts.slice(1).join("@") || null,
         version: inst.version || null,
         gitCommitSha: inst.gitCommitSha || null
       });
     }
-    process.stdout.write(JSON.stringify(arr));
-  " < "$plugins_path" 2>/dev/null || echo '[]')
-else
-  plugins='[]'
-fi
+  } catch {}
+}
 
-# Read known marketplaces via stdin
-if [ -f "$mk_path" ]; then
-  marketplaces=$(node -e "
-    const data = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-    process.stdout.write(JSON.stringify(
-      Object.entries(data).map(([name, info]) => ({
-        name,
-        path: info.path || null,
-        gitUrl: info.gitUrl || info.url || null
-      }))
-    ));
-  " < "$mk_path" 2>/dev/null || echo '[]')
-else
-  marketplaces='[]'
-fi
+// Read known marketplaces
+let marketplaces = [];
+if (fs.existsSync(mkPath)) {
+  try {
+    const data = JSON.parse(fs.readFileSync(mkPath, "utf8"));
+    marketplaces = Object.entries(data).map(([name, info]) => ({
+      name,
+      path: info.installLocation || info.path || null,
+      repo: info.source?.repo || info.gitUrl || info.url || null
+    }));
+  } catch {}
+}
 
-# Check remote updates (optional)
-remote_info='{}'
-if [ "${1:-}" = "--check-remote" ] && [ "$marketplaces" != '[]' ]; then
-  remote_info=$(echo "$marketplaces" | node -e "
-    const mks = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-    const result = {};
-    for (const mk of mks) {
-      if (mk.path) {
-        const p = mk.path.replace(/^~/, process.env.HOME || '');
-        result[mk.name] = { path: p, latestSha: null, error: null };
-      }
+// Check remote updates via git fetch
+const remoteInfo = {};
+if (checkRemote && marketplaces.length > 0) {
+  for (const mk of marketplaces) {
+    if (!mk.path) continue;
+    const expanded = mk.path.replace(/^~/, home);
+    if (!fs.existsSync(expanded)) continue;
+
+    try {
+      // Get default branch
+      const headOutput = execSync(
+        "git remote show origin",
+        { cwd: expanded, encoding: "utf8", stdio: ["pipe","pipe","pipe"] }
+      );
+      const branchMatch = headOutput.match(/HEAD branch:\s*(\S+)/);
+      const branch = branchMatch ? branchMatch[1] : "main";
+
+      // Fetch latest
+      execSync(
+        "git fetch origin",
+        { cwd: expanded, encoding: "utf8", stdio: ["pipe","pipe","pipe"] }
+      );
+
+      // Get remote HEAD SHA
+      const sha = execSync(
+        `git rev-parse origin/${branch}`,
+        { cwd: expanded, encoding: "utf8", stdio: ["pipe","pipe","pipe"] }
+      ).trim();
+
+      remoteInfo[mk.name] = { path: expanded, branch, latestSha: sha, error: null };
+    } catch (e) {
+      remoteInfo[mk.name] = { path: expanded, latestSha: null, error: String(e.message || e).slice(0, 200) };
     }
-    process.stdout.write(JSON.stringify(result));
-  " 2>/dev/null || echo '{}')
-fi
+  }
+}
 
-echo "{\"plugins\":$plugins,\"marketplaces\":$marketplaces,\"remoteInfo\":$remote_info}"
+process.stdout.write(JSON.stringify({ plugins, marketplaces, remoteInfo }));
+' -- "$home" "$@"

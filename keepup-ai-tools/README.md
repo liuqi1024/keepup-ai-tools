@@ -1,5 +1,7 @@
 # keepup-ai-tools
 
+**English** | [中文](README_zh.md)
+
 > One-command check & update for all your AI agent CLI tools, Skills, and Plugins.
 
 A cross-agent [Skill](https://code.claude.com/docs/en/skills) that works with **Claude Code, Codex, Hermes**, and any agent supporting the SKILL.md format. Install once via `npx skills add`, available in all your agents.

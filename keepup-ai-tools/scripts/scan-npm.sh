@@ -54,10 +54,9 @@ if [ "${1:-}" = "--with-outdated" ]; then
   fi
 fi
 
-node -e "
-  const installed = JSON.parse('$installed');
-  const outdated = JSON.parse('$outdated');
-  // Merge: add update info to installed
+printf '{"installed":%s,"outdated":%s}' "$installed" "$outdated" | node -e "
+  const raw = require('fs').readFileSync(0, 'utf8');
+  const { installed, outdated } = JSON.parse(raw);
   for (const [name, info] of Object.entries(installed)) {
     if (outdated[name]) {
       info.latest = outdated[name].latest;

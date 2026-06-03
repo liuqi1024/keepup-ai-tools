@@ -1,6 +1,6 @@
 ---
 name: keepup-ai-tools
-version: 1.1.0
+version: 1.0.2
 description: >-
   Cross-agent skill: one-command check & update for all AI CLI tools, Skills and Plugins.
   Works with Claude Code, Codex, Hermes, and any agent that supports SKILL.md.
